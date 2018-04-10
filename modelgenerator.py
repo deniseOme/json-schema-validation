@@ -19,38 +19,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 '''
 
-from urllib2 import *
+from urllib3 import *
 from pprint import pprint
 #import python_jsonschema_objects as pjs
 import json 
 import copy
+import os
 import sys
 import re
 import shutil
 import optparse
 import shutil
-import ConfigParser
+import configparser
 import io
+import requests
 
 __author__ = "Gautier Koscielny"
 __copyright__ = "Copyright 2014-2017, Open Targets"
 __credits__ = ["Gautier Koscielny", "Samiul Hasan"]
 __license__ = "Apache 2.0"
-__version__ = "1.2.4"
+__version__ = "1.2.8"
 __maintainer__ = "Gautier Koscielny"
 __email__ = "gautierk@targetvalidation.org"
 __status__ = "Production"
 
 basepackagepath = "opentargets/model"
-packageClassNames = {}
-packageClassDefinitions = {}
-packagePythonMapping = {}
+packageClassNames = dict()
+packageClassDefinitions = dict()
+packagePythonMapping = dict()
 baseindent = "  "
 
 requirements = '''nose>=1.3.4
 tox>=1.7.0
 wheel>=0.22.0
-iso8601>=0.1.10
+iso8601>=0.1.12
+six>1.11.0
 '''
 
 manifest = '''recursive-include opentargets *.py
@@ -81,22 +84,35 @@ long_description = open(os.path.join(os.path.dirname(__file__), "README.rst")).r
 
 setup(
     name="data_model",
-    version="1.2.4",
+    version="1.2.8",
     description=long_description.split("\\n")[0],
     long_description=long_description,
     author="Gautier Koscielny",
     author_email="gautierk@targetvalidation.org",
+    maintainer='Open Targets Core Team',
+    maintainer_email='support@targetvalidation.org',
     url="https://github.com/opentargets/data_model",
     #packages=find_packages('.'),
     #package_dir = {'': '.'},
     #namespace_packages = ["opentargets", "opentargets.model"],
     packages=[ LIST_PACKAGES ],
-    license="Apache2",
+    license="Apache 2.0",
+    keywords= ['opentargets', 'bioinformatics', 'data_model'],
     classifiers=[
-        "License :: Apache 2",
+        "License :: Apache 2.0",
         "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 3",
     ],
+    install_requires=[
+          'opentargets',
+          'iso8601>=0.1.12',
+    ],
+    extras_require={
+          'tests': [
+              'nose>=1.3.4',
+              'tox>=1.7.0',
+              'wheel>=0.22.0'
+              ]}
 )
 
 '''
@@ -107,7 +123,7 @@ Installation using python's pip installer:
 
 - (As root) pip install git+https://github.com/opentargets/data_model.git
 - (Install to a custom folder called 'data_model') pip install -t data_model git+https://github.com/opentargets/data_model.git
-- (Install a specific version of the code in a specific folder, here 1.2.4) pip install -t data_model-1.2.4 git+https://github.com/opentargets/data_model.git@1.2.4
+- (Install a specific version of the code in a specific folder, here 1.2.8) pip install -t data_model-1.2.8 git+https://github.com/opentargets/data_model.git@1.2.8
 
 '''
 
@@ -342,7 +358,7 @@ __author__ = "Gautier Koscielny"
 __copyright__ = "Copyright 2014-2017, Open Targets"
 __credits__ = ["Gautier Koscielny", "Samiul Hasan"]
 __license__ = "Apache 2.0"
-__version__ = "1.2.4"
+__version__ = "1.2.8"
 __maintainer__ = "Gautier Koscielny"
 __email__ = "gautierk@targetvalidation.org"
 __status__ = "Production"
@@ -354,8 +370,8 @@ def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None
     this method will get all the class properties of the specified reference
     classes and packages information are stored in the 'packageClassNames' dictionary
     '''
-    classProperties = {}
-    print textindent + "Find class for reference " + ref
+    classProperties = dict()
+    print (textindent + "Find class for reference " + ref)
     
     '''
     A reference as a local reference. This happens inside a JSON Schema file usually
@@ -364,7 +380,7 @@ def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None
     '''
     local_match = re.match("^#/(.+)$", ref)
     if local_match:
-        print textindent + "Correct and point to full URI " + ref
+        print (textindent + "Correct and point to full URI " + ref)
         ref = uri + ref
         
     '''
@@ -387,7 +403,7 @@ def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None
          in packageClassNames
         '''
         if not ref in packageClassNames:
-            print textindent + ";".join(uri_match.groups())
+            print(textindent + ";".join(uri_match.groups()))
             uriclasspath = uri_match.groups()[0]
             # get python package for this json file
             jsonFile = json_match.groups()[0]
@@ -396,8 +412,10 @@ def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None
                 opener = build_opener(proxy_handler)
                 data = opener.open( jsonFile ).read()
             else:          
-                data = urlopen( jsonFile ).read()
-            jsonclass = json.loads(data)
+                #data = urlopen( jsonFile ).read()
+                r = requests.get(jsonFile)
+
+            jsonclass = r.json()
             className = None
             raw = None
             
@@ -405,10 +423,10 @@ def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None
                 p = re.compile(r'/')
                 raw = p.split(uriclasspath)
                 className = raw[-1].title() + innerClass.title()
-                print textindent + "inner class '" + className + "' found"
+                print(textindent + "inner class '" + className + "' found")
             elif len(uri_match.groups()[1]) > 0:
                 subschema = uri_match.groups()[1]
-                print textindent + "Found subschema " + subschema
+                print(textindent + "Found subschema " + subschema)
                 definition_match = re.match("^(.*)/definitions/(.+)$", subschema)
                 raw = subschema.split("/")
                 className = raw[-1].title()
@@ -419,11 +437,11 @@ def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None
                 raw = p.split(uriclasspath)
                 className = raw[-1].title()
        
-            print textindent + "IsClass: " + className
+            print(textindent + "IsClass: " + className)
             # retrieve the package name for this class
             dirpath = packagePythonMapping[jsonFile]
             baselevels = len(basepackagepath.split("/"))
-            print textindent + dirpath
+            print(textindent + dirpath)
             classProperties['dirPath'] = dirpath
 
             #if 'id' in jsonclass and 'type' in jsonclass['properties']:
@@ -436,14 +454,14 @@ def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None
             if len(raw) > baselevels:
                 classProperties['import_as'] = "_".join(raw[baselevels:len(raw)])
             classProperties['classpath'] = '.'.join(raw) + '.' + className
-            print textindent + "classpath: " + classProperties['classpath']
+            print(textindent + "classpath: " + classProperties['classpath'])
             packageClassNames[ref] = classProperties
             
         else:
             classProperties = packageClassNames[ref]
-            print textindent + "IsClass: " + classProperties['class']
-            print textindent + "IsPackage: " + classProperties['package']
-            print textindent + "IsImportedAs: " + classProperties['import_as']
+            print(textindent + "IsClass: " + classProperties['class'])
+            print(textindent + "IsPackage: " + classProperties['package'])
+            print(textindent + "IsImportedAs: " + classProperties['import_as'])
             
 #    elif local_match:
 #        localref = local_match.groups()[0]
@@ -479,14 +497,14 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
     schemaVersion = None
     
     '''
-    Initialise the map that will contain all the attributes of the data structure.
+    Initialise the dict_obj that will contain all the attributes of the data structure.
     The JSON data structure is not always transformed into a class. Hence the 
     isAClass flag set to False by default.
     '''
-    myMap = {}
-    myMap['attributes'] = {}
-    myMap['classes'] = list()
-    myMap['isAClass'] = False
+    myDictionary = dict()
+    myDictionary['attributes'] = dict()
+    myDictionary['classes'] = list()
+    myDictionary['isAClass'] = False
     
     '''
     The indentation is related to the depth of the definition
@@ -494,14 +512,14 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
     '''
     textindent = baseindent*depth
     
-    print textindent + "--------------"
+    print(textindent + "--------------")
     if propertyName:
         if parentName:
-            print textindent + "propertyName:\t" + propertyName + " (" + parentName + ")"
+            print(textindent + "propertyName:\t" + propertyName + " (" + parentName + ")")
         else:
-            print textindent + "propertyName:\t" + propertyName
+            print(textindent + "propertyName:\t" + propertyName)
 
-    print textindent + 'Keys:\t\t' + ','.join(skeleton.keys())
+    print(textindent + 'Keys:\t\t' + ','.join(skeleton.keys()))
     
     referencedSchema = None
     referencedClassProperties = None
@@ -514,7 +532,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
     
     if type(skeleton) is dict:
     
-        print textindent + "Parsing data structure"
+        print(textindent + "Parsing dict structure")
         
         if '$ref' in skeleton:
             '''
@@ -523,6 +541,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
              happens separately
             '''
             dataType = 'object' # $ref
+            canBeNull = False
             generateClassDefinition = False
             referencedSchema = skeleton['$ref']
             referencedClassProperties = get_class_properties_from_ref(referencedSchema, textindent, uri = uri, proxy = proxy)
@@ -539,8 +558,9 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
             a class definition for this entity
             '''
             dataType = skeleton['type']
+            canBeNull = False
             generateClassDefinition = True
-            print textindent + "DataType: %s" %(dataType)
+            print(textindent + "DataType: %s" %(dataType))
             ''' 
             here, we assume inheritance of only one class and
             we extract the parent definition reference and store
@@ -551,14 +571,22 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
             referencedClassProperties = get_class_properties_from_ref(referencedSchema, textindent, uri = uri, proxy = proxy)
                 
         elif 'type' in skeleton:
+            canBeNull = False
             if type(skeleton['type']) is list:
-                print textindent + "DataType: %s" %(','.join(skeleton['type']))
-                # horrible hack
+                print(textindent + "DataType: %s" %(','.join(skeleton['type'])))
+
+                if 'null' in skeleton['type']:
+                    canBeNull = True
+                    print(textindent + "canBeNull: %r" % (canBeNull))
+                    skeleton['type'].remove('null')
                 dataType = skeleton['type'][0]
-                sys.exit(1)
+                # horrible hack for edge case
+                if len(skeleton['type'])>1:
+                    print(textindent + "ERROR: The type field contains multiple elements that are not compatible in JSON Schema")
+                    sys.exit(1)
             else:
                 dataType = skeleton['type']
-                print textindent + "DataType: %s" %(dataType)
+                print(textindent + "DataType: %s" %(dataType))
             
         if referencedSchema:
             '''
@@ -581,8 +609,8 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
              and the oneOf declaration when an attribute must be one of 
              a set of subschemas
             '''
-            superClasses = []
-            oneOfClasses = []
+            superClasses = list()
+            oneOfClasses = list()
             
             if 'allOf' in skeleton:
                 '''
@@ -595,7 +623,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 parentURI = skeleton['allOf'][0]
                 parentClassProperties = get_class_properties_from_ref(parentURI['$ref'], textindent, uri = uri, proxy = proxy)
                 superClasses.append(parentClassProperties)
-                print textindent + "SuperClass:\t" + parentClassProperties['package']
+                print(textindent + "SuperClass:\t" + parentClassProperties['package'])
 
             elif 'oneOf' in skeleton:
                 '''
@@ -608,7 +636,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 for parentRef in skeleton['oneOf']:
                     oneOfClassProperties = get_class_properties_from_ref(parentRef['$ref'], textindent, uri = uri, proxy = proxy)
                     oneOfClasses.append(oneOfClassProperties)
-                    print textindent + "Polymorphic Class:\t" + oneOfClassProperties['package']
+                    print(textindent + "Polymorphic Class:\t" + oneOfClassProperties['package'])
                     '''
                      The reference may come from another package. In this case, we need to import
                      the relevant package in the ini file of the current package for the current class
@@ -628,7 +656,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
             elif 'additionalProperties' in skeleton:
                 print("additionalProperties for attribute %s" %(propertyName))
             else:
-                print textindent + "SuperClass:\tobject"
+                print(textindent + "SuperClass:\tobject")
                             
             '''
              If we are at the root of the schema
@@ -640,7 +668,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 '''
                 create a python class with the same namespace and same identifier
                 '''
-                myMap['isAClass'] = True
+                myDictionary['isAClass'] = True
                 
                 '''
                  generate a class identifier based on the URI
@@ -653,18 +681,18 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                     classProperties = get_class_properties_from_ref(uri + "#" + propertyName, textindent, innerClass = propertyName, uri = uri, proxy = proxy)
                     classId = uri + " inner class:("+propertyName+")"
                 
-                print textindent + "URI:\t" + uri
+                print(textindent + "URI:\t" + uri)
                 className = classProperties['class']
                 #if 'properties' in skeleton and 'type' in skeleton['properties']:
-                #    myMap['class'] = skeleton['properties']['type']['enum'][0]
+                #    myDictionary['class'] = skeleton['properties']['type']['enum'][0]
                 #else:
-                myMap['class'] = classProperties['class']
-                myMap['package'] = classProperties['package']
-                print textindent + "ClassName:\t" + myMap['class']
+                myDictionary['class'] = classProperties['class']
+                myDictionary['package'] = classProperties['package']
+                print(textindent + "ClassName:\t" + myDictionary['class'])
                 
                 packageClassDefinitions[package]['classes'].append(className)
-                packageClassDefinitions[package][className] = {}
-                packageClassDefinitions[package][className]['imports'] = []
+                packageClassDefinitions[package][className] = dict()
+                packageClassDefinitions[package][className]['imports'] = list()
               
                 '''
                  The reference may come from another package. In this case, we need to import
@@ -683,7 +711,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                  If the ID is a URL
                 '''
                 if 'definitions' in skeleton:
-                    print textindent + "Parse extra definitions at depth {0}".format(depth)
+                    print(textindent + "Parse extra definitions at depth {0}".format(depth))
                     for definition_key in skeleton['definitions']:
                         prefix = uri
                         if uri in skeleton['id']:
@@ -707,12 +735,12 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
              the class definition, we have to add them in the constructors 
              and call the superclass for initialisation, cloning or validation
             '''
-            classAttributes = {}
+            classAttributes = dict()
 
             if 'allOf' in skeleton and len(skeleton['allOf']) > 1 and 'properties' in skeleton['allOf'][1]:
                 classAttributes = skeleton['allOf'][1]['properties']
                 if ('type' in classAttributes):
-                    print json.dumps(classAttributes)
+                    print(json.dumps(classAttributes))
                     #sys.exit(1)
             elif 'properties' in skeleton:
                 '''
@@ -723,7 +751,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
             '''
              Record what are the required attributes
             '''
-            requiredArray = []
+            requiredArray = list()
             if 'required' in skeleton:
                 requiredArray = skeleton['required']
                 #print "...".join(requiredArray)
@@ -738,22 +766,31 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                  don't parse the type of the class either
                 '''
                 if not attribute_key in ['import_remote_schemas', 'allOf']:
-                    childMap = generate_classes(classAttributes[attribute_key], propertyName=attribute_key, parentName=pName, package=package, required=(attribute_key in requiredArray), depth=depth+1, uri=uri, proxy=proxy )
-                    myMap['attributes'][attribute_key] = childMap
+                    print("-------->%s"%uri)
+                    childDict = generate_classes(
+                        classAttributes[attribute_key],
+                        propertyName=attribute_key,
+                        parentName=pName,
+                        package=package,
+                        required=(attribute_key in requiredArray),
+                        depth=depth+1,
+                        uri=uri,
+                        proxy=proxy)
+                    myDictionary['attributes'][attribute_key] = childDict
                     '''
-                     extends the classes definition with the one from this map
+                     extends the classes definition with the one from this dictionary
                     '''
-                    #myMap['classes'].extend(childMap['classes'])
+                    #myDictionary['classes'].extend(childDict['classes'])
 
             '''
              Now let's specify the class declaration, all the constructors and methods
             '''
             indent = "  "*2
             if propertyName:
-                myMap['__assign__'] = indent + "self." + propertyName + " = " + propertyName + "\n"
-                myMap['__init__'] = indent + "\"\"\"\n"
-                myMap['__init__'] += indent + "Name: " + propertyName + "\n"
-                myMap['__init__'] += indent + "\"\"\"\n"
+                myDictionary['__assign__'] = indent + "self." + propertyName + " = " + propertyName + "\n"
+                myDictionary['__init__'] = indent + "\"\"\"\n"
+                myDictionary['__init__'] += indent + "Name: " + propertyName + "\n"
+                myDictionary['__init__'] += indent + "\"\"\"\n"
                 '''
                 describes properties not accounted for by the "properties" or "patternProperties" keywords
                 If this value is not specified (or is boolean true, then additional properties can contain anything
@@ -763,8 +800,8 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 We create a validation for properties                  
                 '''
                 if ('oneOf' in skeleton):
-                    validateClause = []
-                    myMap['__map__'] = indent + "if '{0}' in map:\n".format(propertyName)
+                    validateClause = list()
+                    myDictionary['__dict__'] = indent + "if '{0}' in dict_obj:\n".format(propertyName)
                     el = ""
 
                     for oneOfClass in oneOfClasses:
@@ -772,80 +809,80 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                         '''
                          Assign the object to the correct class
                         '''
-                        myMap['__map__'] += indent*2 + el + "if not {0}.{1}.fromMap(map['{2}']) is None:\n".format(oneOfClass['import_as'], oneOfClass['class'], propertyName)
-                        myMap['__map__'] += indent*3 + "obj." + propertyName + " = {0}.{1}.fromMap(map['{2}'])\n".format(oneOfClass['import_as'], oneOfClass['class'], propertyName)
+                        myDictionary['__dict__'] += indent*2 + el + "if not {0}.{1}.fromDict(dict_obj['{2}']) is None:\n".format(oneOfClass['import_as'], oneOfClass['class'], propertyName)
+                        myDictionary['__dict__'] += indent*3 + "obj." + propertyName + " = {0}.{1}.fromDict(dict_obj['{2}'])\n".format(oneOfClass['import_as'], oneOfClass['class'], propertyName)
                         el = "el"
                     
-                    myMap['__map__'] += indent*2 + "else:\n"
-                    myMap['__map__'] += indent*3 + "raise opentargets.model.core.JSONException(\"" + propertyName + " can't be cast to any class\")\n"
+                    myDictionary['__dict__'] += indent*2 + "else:\n"
+                    myDictionary['__dict__'] += indent*3 + "raise opentargets.model.core.JSONException(\"" + propertyName + " can't be cast to any class\")\n"
                     if required:
-                        #myMap['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = {}\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
-                        myMap['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"                        
-                        myMap['__default__'] = propertyName + " = None"
-                        myMap['__clone__'] = indent + "obj." + propertyName + " = clone." + propertyName + "\n"
-                        #myMap['__map__'] = indent + "obj." + propertyName + " = map['" + propertyName + "']\n"
+                        #myDictionary['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = collections.OrderedDict()\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
+                        myDictionary['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"                        
+                        myDictionary['__default__'] = propertyName + " = None"
+                        myDictionary['__clone__'] = indent + "obj." + propertyName + " = clone." + propertyName + "\n"
+                        #myDictionary['__dict__'] = indent + "obj." + propertyName + " = dict_obj['" + propertyName + "']\n"
                         # x is not None
-                        myMap['__validate__'] = indent + "if self."+ propertyName +" is None:\n"
-                        myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
-                        myMap['__validate__'] += indent*2 + "error = error + 1\n"
-                        myMap['__validate__'] += indent + "elif not("+" or".join(validateClause)+"):\n"
-                        myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" incorrect type\".format(path))\n"
-                        myMap['__validate__'] += indent*2 + "error = error + 1\n"
-                        myMap['__validate__'] += indent + "else:\n"
-                        myMap['__validate__'] += indent*2 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
-                        myMap['__validate__'] += indent*2 + "error = error + "+ propertyName + "_error\n"
+                        myDictionary['__validate__'] = indent + "if self."+ propertyName +" is None:\n"
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
+                        myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "elif not("+" or".join(validateClause)+"):\n"
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" incorrect type\".format(path))\n"
+                        myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "else:\n"
+                        myDictionary['__validate__'] += indent*2 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
+                        myDictionary['__validate__'] += indent*2 + "error = error + "+ propertyName + "_error\n"
                     else:
-                        print textindent + "init not required oneOf {0}\n".format(propertyName)
-                        myMap['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
-                        myMap['__default__'] = propertyName + " = None"
-                        myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                        myMap['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
-                        #myMap['__map__'] = indent + "if  '" + propertyName + "' in map:\n"
-                        #myMap['__map__'] += indent*2 + "obj." + propertyName + " = map['" + propertyName + "']\n"   
-                        myMap['__validate__'] = indent + "if self."+ propertyName + ":\n" 
-                        myMap['__validate__'] = indent*2 + "if not ("+" or".join(validateClause)+"):\n"
-                        myMap['__validate__'] += indent*3 + "logger.error(\""+parentName+" - {0}."+propertyName+" incorrect type\".format(path))\n"
-                        myMap['__validate__'] += indent*3 + "error = error + 1\n"
-                        myMap['__validate__'] += indent*2 + "else:\n"
-                        myMap['__validate__'] += indent*3 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
-                        myMap['__validate__'] += indent*3 + "error = error + "+ propertyName + "_error\n"
+                        print(textindent + "init not required oneOf {0}\n".format(propertyName))
+                        myDictionary['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
+                        myDictionary['__default__'] = propertyName + " = None"
+                        myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                        myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
+                        #myDictionary['__dict__'] = indent + "if  '" + propertyName + "' in dict_obj:\n"
+                        #myDictionary['__dict__'] += indent*2 + "obj." + propertyName + " = dict_obj['" + propertyName + "']\n"   
+                        myDictionary['__validate__'] = indent + "if self."+ propertyName + ":\n" 
+                        myDictionary['__validate__'] = indent*2 + "if not ("+" or".join(validateClause)+"):\n"
+                        myDictionary['__validate__'] += indent*3 + "logger.error(\""+parentName+" - {0}."+propertyName+" incorrect type\".format(path))\n"
+                        myDictionary['__validate__'] += indent*3 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent*2 + "else:\n"
+                        myDictionary['__validate__'] += indent*3 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
+                        myDictionary['__validate__'] += indent*3 + "error = error + "+ propertyName + "_error\n"
                         
                     # don't forget to serialize
-                    myMap['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +".serialize()\n"
+                    myDictionary['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +".serialize()\n"
                     
-                elif myMap['isAClass'] or '$ref' in skeleton:
+                elif myDictionary['isAClass'] or '$ref' in skeleton:
                     if required:
-                        #myMap['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = " + className + "()\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
-                        myMap['__init__'] += indent + "self." + propertyName + " = "+ propertyName + "\n"
-                        myMap['__default__'] = propertyName + " = None"
-                        myMap['__clone__'] = indent + "obj." + propertyName + " = " + className + ".cloneObject(clone." + propertyName + ")\n"
-                        myMap['__map__'] = indent + "if  '" + propertyName + "' in map:\n"
-                        myMap['__map__'] += indent*2 + "obj." + propertyName + " = " + className + ".fromMap(map['" + propertyName + "'])\n"
-                        myMap['__validate__'] = indent + "if self."+ propertyName +" is None:\n"
-                        myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
-                        myMap['__validate__'] += indent*2 + "error = error + 1\n"
-                        myMap['__validate__'] += indent + "elif not isinstance(self.{0}, {1}):\n".format(propertyName, className)
-                        myMap['__validate__'] += indent*2 + "logger.error(\""+className+" class instance expected for attribute - {0}."+propertyName+"\".format(path))\n"
-                        myMap['__validate__'] += indent*2 + "error = error + 1\n"
-                        myMap['__validate__'] += indent + "else:\n"
-                        myMap['__validate__'] += indent*2 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
-                        myMap['__validate__'] += indent*2 + "error = error + "+ propertyName + "_error\n"
+                        #myDictionary['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = " + className + "()\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
+                        myDictionary['__init__'] += indent + "self." + propertyName + " = "+ propertyName + "\n"
+                        myDictionary['__default__'] = propertyName + " = None"
+                        myDictionary['__clone__'] = indent + "obj." + propertyName + " = " + className + ".cloneObject(clone." + propertyName + ")\n"
+                        myDictionary['__dict__'] = indent + "if  '" + propertyName + "' in dict_obj:\n"
+                        myDictionary['__dict__'] += indent*2 + "obj." + propertyName + " = " + className + ".fromDict(dict_obj['" + propertyName + "'])\n"
+                        myDictionary['__validate__'] = indent + "if self."+ propertyName +" is None:\n"
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
+                        myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "elif not isinstance(self.{0}, {1}):\n".format(propertyName, className)
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\""+className+" class instance expected for attribute - {0}."+propertyName+"\".format(path))\n"
+                        myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "else:\n"
+                        myDictionary['__validate__'] += indent*2 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
+                        myDictionary['__validate__'] += indent*2 + "error = error + "+ propertyName + "_error\n"
                     else:
-                        myMap['__init__'] += indent + "self." + propertyName + " = "+ propertyName + "\n"
-                        myMap['__default__'] = indent + propertyName + " = None"
-                        myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                        myMap['__clone__'] += indent*2 + "obj." + propertyName + " = " + className + ".cloneObject(clone." + propertyName + ")\n"
-                        myMap['__map__'] = indent + "if  '" + propertyName + "' in map:\n"
-                        myMap['__map__'] += indent*2 + "obj." + propertyName + " = " + className + ".fromMap(map['" + propertyName + "'])\n"
-                        myMap['__validate__'] = indent + "if self."+ propertyName +":\n"
-                        myMap['__validate__'] += indent*2 + "if not isinstance(self.{0}, {1}):\n".format(propertyName, className)
-                        myMap['__validate__'] += indent*3 + "logger.error(\""+className+" class instance expected for attribute - {0}."+propertyName+"\".format(path))\n"
-                        myMap['__validate__'] += indent*3 + "error = error + 1\n"
-                        myMap['__validate__'] += indent*2 + "else:\n"                        
-                        myMap['__validate__'] += indent*3 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
-                        myMap['__validate__'] += indent*3 + "error = error + "+ propertyName + "_error\n"
+                        myDictionary['__init__'] += indent + "self." + propertyName + " = "+ propertyName + "\n"
+                        myDictionary['__default__'] = indent + propertyName + " = None"
+                        myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                        myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = " + className + ".cloneObject(clone." + propertyName + ")\n"
+                        myDictionary['__dict__'] = indent + "if  '" + propertyName + "' in dict_obj:\n"
+                        myDictionary['__dict__'] += indent*2 + "obj." + propertyName + " = " + className + ".fromDict(dict_obj['" + propertyName + "'])\n"
+                        myDictionary['__validate__'] = indent + "if self."+ propertyName +":\n"
+                        myDictionary['__validate__'] += indent*2 + "if not isinstance(self.{0}, {1}):\n".format(propertyName, className)
+                        myDictionary['__validate__'] += indent*3 + "logger.error(\""+className+" class instance expected for attribute - {0}."+propertyName+"\".format(path))\n"
+                        myDictionary['__validate__'] += indent*3 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent*2 + "else:\n"                        
+                        myDictionary['__validate__'] += indent*3 + propertyName + "_error = self." + propertyName +".validate(logger, path = '.'.join([path, '" + propertyName +"']))\n"
+                        myDictionary['__validate__'] += indent*3 + "error = error + "+ propertyName + "_error\n"
 
-                    myMap['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +".serialize()\n"
+                    myDictionary['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +".serialize()\n"
 
                 elif ('additionalProperties' in skeleton):
                     '''
@@ -855,49 +892,49 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                      and set to False, no additional properties will be allowed.
                     '''
                     additionalProperties = skeleton['additionalProperties']
-                    print textindent + "additionalProperties found - check if it's a dictionary\n"
-                    print textindent + "additionalProperties found - required {0}\n".format(required)
+                    print(textindent + "additionalProperties found - check if it's a dictionary\n")
+                    print(textindent + "additionalProperties found - required {0}\n".format(required))
                     
                     if type(additionalProperties) is dict:                
                         if required:
-                            myMap['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = {}\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
-                            myMap['__default__'] = propertyName + " = None"
-                            myMap['__clone__'] = indent + "obj." + propertyName + " = clone." + propertyName + "\n"
-                            myMap['__map__'] = indent + "obj." + propertyName + " = map['" + propertyName + "']\n"
-                            myMap['__validate__'] = indent + "if self."+ propertyName +" is None :\n"
-                            myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
-                            myMap['__validate__'] += indent*2 + "error = error + 1\n"
-                            myMap['__validate__'] += indent + "elif not isinstance(self.{0}, dict):\n".format(propertyName)
-                            myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+"dictionary expected for attribute - {0}."+propertyName+"\".format(path))\n"
-                            myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                            myDictionary['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = collections.OrderedDict()\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
+                            myDictionary['__default__'] = propertyName + " = None"
+                            myDictionary['__clone__'] = indent + "obj." + propertyName + " = clone." + propertyName + "\n"
+                            myDictionary['__dict__'] = indent + "obj." + propertyName + " = dict_obj['" + propertyName + "']\n"
+                            myDictionary['__validate__'] = indent + "if self."+ propertyName +" is None :\n"
+                            myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
+                            myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
+                            myDictionary['__validate__'] += indent + "elif not isinstance(self.{0}, dict):\n".format(propertyName)
+                            myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+"dictionary expected for attribute - {0}."+propertyName+"\".format(path))\n"
+                            myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
                         else:
-                            print textindent +  "well init this {0}\n".format(propertyName)
+                            print (textindent +  "well init this {0}\n".format(propertyName))
                             
-                            myMap['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
-                            myMap['__default__'] = propertyName + " = None"
-                            myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                            myMap['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
-                            myMap['__map__'] = indent + "if  '" + propertyName + "' in map:\n"
-                            myMap['__map__'] += indent*2 + "obj." + propertyName + " = map['" + propertyName + "']\n"
-                            myMap['__validate__'] = indent + "if self.{0} and not isinstance(self.{0}, dict):\n".format(propertyName)
-                            myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+"dictionary expected for attribute - {0}."+propertyName+"\".format(path))\n"
-                            myMap['__validate__'] += indent*2 + "error = error + 1\n"                            
-                        myMap['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +"\n"
+                            myDictionary['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
+                            myDictionary['__default__'] = propertyName + " = None"
+                            myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                            myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
+                            myDictionary['__dict__'] = indent + "if  '" + propertyName + "' in dict_obj:\n"
+                            myDictionary['__dict__'] += indent*2 + "obj." + propertyName + " = dict_obj['" + propertyName + "']\n"
+                            myDictionary['__validate__'] = indent + "if self.{0} is not None and not isinstance(self.{0}, dict):\n".format(propertyName)
+                            myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+"dictionary expected for attribute - {0}."+propertyName+"\".format(path))\n"
+                            myDictionary['__validate__'] += indent*2 + "error = error + 1\n"                            
+                        myDictionary['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +"\n"
                         
                         if 'pattern' in skeleton:
                             pattern = skeleton['pattern']
-                            myMap['__validate__'] += indent + "if self." + propertyName + " and not re.match('"+ pattern +"', self." + propertyName + "):\n"
-                            myMap['__validate__'] += indent*2 + "logger.error(\"" + parentName + " - {0}."+propertyName+" '{1}'\".format(path,self." + propertyName + ") + \" does not match pattern '"+pattern+"'\")\n"
-                            myMap['__validate__'] += indent*2 + "logger.warn(json.dumps(self.{0}, sort_keys=True, indent=2))\n".format(propertyName)
+                            myDictionary['__validate__'] += indent + "if self." + propertyName + " is not None and not re.match('"+ pattern +"', self." + propertyName + "):\n"
+                            myDictionary['__validate__'] += indent*2 + "logger.error(\"" + parentName + " - {0}."+propertyName+" '{1}'\".format(path,self." + propertyName + ") + \" does not match pattern '"+pattern+"'\")\n"
+                            myDictionary['__validate__'] += indent*2 + "logger.warn(json.dumps(self.{0}, sort_keys=True, indent=2))\n".format(propertyName)
                     elif type(additionalProperties) is bool and additionalProperties == False:
-                        print textident + "TODO: No additionalProperties for this class"
+                        print(textident + "TODO: No additionalProperties for this class")
                         
                     #sys.exit(1)
                 else:
                     print(textindent + "Unknown condition to generate class template")
                     sys.exit(1)
                     
-            if myMap['isAClass']:
+            if myDictionary['isAClass']:
                             
                 '''
                  Generate the python class specification with:
@@ -907,7 +944,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                      the constructor for the fields that belongs to the superclass
                   2. a constructor will all the fields as arguments with default values
                   3. a deep-copy constructor (clone)
-                  4. a map constructor (from json)
+                  4. a dict_obj constructor (from json)
                   5. a validation method to validate against the JSON Schema
                   6. add any other methods
                   7. get dictionary of non empty object
@@ -926,9 +963,9 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 if (len(superClasses) == 0):
                     classDefinition += "class " + className + "(object):\n"
                 else:
-                    superClassPaths = []
+                    superClassPaths = list()
                     for parentClassProperty in superClasses:
-                        print textindent + parentClassProperty['classpath']
+                        print(textindent + parentClassProperty['classpath'])
                         if parentClassProperty['package'] == package:
                             superClassPaths.append(parentClassProperty['class'])
                         else:
@@ -938,46 +975,46 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 '''
                  get attributes from superclass
                 '''
-                superArrayDefaultValues = []
-                superClassMap = None
+                superArrayDefaultValues = list()
+                superClassDict = None
                 parentClassProperty = None
                 superClassAttributes = None
                 if (len(superClasses) > 0):
                     parentClassProperty = superClasses[0]
-                    print "Super class: {0} {1}".format(parentClassProperty['package'],parentClassProperty['class'])
-                    superClassMap = packageClassDefinitions[parentClassProperty['package']][parentClassProperty['class']]['specs']
-                    print textindent + "{0}".format(",".join(superClassMap.keys()))
-                    superArrayDefaultValues = superClassMap['arrayDefaultValues']
+                    print("Super class: {0} {1}".format(parentClassProperty['package'],parentClassProperty['class']))
+                    superClassDict = packageClassDefinitions[parentClassProperty['package']][parentClassProperty['class']]['specs']
+                    print(textindent + "{0}".format(",".join(superClassDict.keys())))
+                    superArrayDefaultValues = superClassDict['arrayDefaultValues']
                     
                 '''
                  1. default initialisation for fields
                     from current class but not 
                     from superclass
                 '''
-                arrayDefaultValues = []
-                for attribute_key in myMap['attributes']:
-                    #classDefinition += myMap['attributes'][attribute_key]['__init__']
-                    if not superClassMap or attribute_key not in superClassMap['attributes'].keys():
-                        print textindent + "Prepare default value for " + attribute_key
-                        arrayDefaultValues.append(myMap['attributes'][attribute_key]['__default__'])
+                arrayDefaultValues = list()
+                for attribute_key in myDictionary['attributes']:
+                    #classDefinition += myDictionary['attributes'][attribute_key]['__init__']
+                    if not superClassDict or attribute_key not in superClassDict['attributes'].keys():
+                        print(textindent + "Prepare default value for " + attribute_key)
+                        arrayDefaultValues.append(myDictionary['attributes'][attribute_key]['__default__'])
                     else:
-                        print textindent + "Superclass attribute " + attribute_key
-                myMap['arrayDefaultValues'] = arrayDefaultValues
+                        print(textindent + "Superclass attribute " + attribute_key)
+                myDictionary['arrayDefaultValues'] = arrayDefaultValues
                    
                 '''
                  2. and another constructor again but with all attributes as arguments
                     with default values. If an attribute is defined twice, we need
                     to initialise the superclass attribute but not inherited one
                 '''
-                if (len(myMap['attributes'].keys())>0 or (superClassMap and len(superClassMap['attributes'].keys())>0)):
+                if (len(myDictionary['attributes'].keys())>0 or (superClassDict and len(superClassDict['attributes'].keys())>0)):
                     argsDefaultValuesArray = arrayDefaultValues
                     classDefinition += baseindent+"\"\"\"\n"
                     classDefinition += baseindent +"Constructor using all fields with default values\n"
                     classDefinition += baseindent+ "Arguments:\n"
-                    if (len(myMap['attributes'].keys())>0):
+                    if (len(myDictionary['attributes'].keys())>0):
                         classDefinition += baseindent+ ":param "
                         classDefinition += "\n{0}:param ".format(baseindent).join(arrayDefaultValues) + "\n"
-                    if (superClassMap and len(superClassMap['attributes'].keys())>0):
+                    if (superClassDict and len(superClassDict['attributes'].keys())>0):
                         classDefinition += baseindent+ ":param "
                         classDefinition += "\n{0}:param ".format(baseindent).join(superArrayDefaultValues) + "\n"                        
                         argsDefaultValuesArray.extend(superArrayDefaultValues)
@@ -987,23 +1024,23 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                     '''
                      call super constructor
                     '''
-                    if (superClassMap and len(superClassMap['attributes'].keys())>0):
+                    if (superClassDict and len(superClassDict['attributes'].keys())>0):
                         classDefinition += baseindent*2 + "\"\"\"\n"
                         classDefinition += baseindent*2 + "Call super constructor\n"
                         classDefinition += baseindent*2 + "BaseClassName.__init__(self, args)\n"
                         classDefinition += baseindent*2 + "\"\"\"\n"
                         #super(Derived, self).func()
-                        #classDefinition += baseindent*2 +  "super({0}, self).__init__({1})\n".format(myMap['class'], ",".join(superClassMap['attributes'].keys()))
-                        initArguments = []
-                        for attribute_key in superClassMap['attributes']:
+                        #classDefinition += baseindent*2 +  "super({0}, self).__init__({1})\n".format(myDictionary['class'], ",".join(superClassDict['attributes'].keys()))
+                        initArguments = list()
+                        for attribute_key in superClassDict['attributes']:
                             initArguments.append(attribute_key + " = " + attribute_key)
-                        classDefinition += baseindent*2 +  "super({0}, self).__init__({1})\n".format(myMap['class'], ",".join(initArguments))
+                        classDefinition += baseindent*2 +  "super({0}, self).__init__({1})\n".format(myDictionary['class'], ",".join(initArguments))
                         #if parentClassProperty['package'] == package:
                         #    classDefinition += baseindent*2 +  "super({0}, self).__init__({1})\n".format(parentClassProperty['class'], ",".join(initArguments))
                         #else:
                         #    classDefinition += baseindent*2 +  "super({0}, self).__init__({1})\n".format(parentClassProperty['import_as'] + "." + parentClassProperty['class'], ",".join(initArguments))
-                    for attribute_key in myMap['attributes']:
-                        classDefinition += myMap['attributes'][attribute_key]['__init__']
+                    for attribute_key in myDictionary['attributes']:
+                        classDefinition += myDictionary['attributes'][attribute_key]['__init__']
 
                 '''
                  3. and a deep copy one (clone) as class method
@@ -1012,44 +1049,44 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 classDefinition += baseindent + "@classmethod\n"
                 classDefinition += baseindent + "def cloneObject(cls, clone):\n"
                 
-                if superClassMap:
+                if superClassDict:
                     classDefinition += baseindent*2 +  "# super will return an instance of the subtype\n"
-                    classDefinition += baseindent*2 +  "obj = super({0}, cls).cloneObject(clone)\n".format(myMap['class'])
+                    classDefinition += baseindent*2 +  "obj = super({0}, cls).cloneObject(clone)\n".format(myDictionary['class'])
                 else:
                     classDefinition += baseindent*2 + "obj = cls()\n"
-                for attribute_key in myMap['attributes']:
-                    classDefinition += myMap['attributes'][attribute_key]['__clone__']
+                for attribute_key in myDictionary['attributes']:
+                    classDefinition += myDictionary['attributes'][attribute_key]['__clone__']
                 classDefinition += baseindent*2 + "return obj\n"
                 '''
-                 4. and a map copy one (map) as class method
-                    check that the parameter passed as an argument is a map
+                 4. and a dict copy one (fromDict) as class method
+                    check that the parameter passed as an argument is a dictionary
                     initialise all the fields first
                 '''
                 classDefinition += baseindent + "\n"                
                 classDefinition += baseindent + "@classmethod\n"
-                classDefinition += baseindent + "def fromMap(cls, map):\n"
-                if (superClassMap and len(superClassMap['attributes'].keys())>0):
+                classDefinition += baseindent + "def fromDict(cls, dict_obj):\n"
+                if (superClassDict and len(superClassDict['attributes'].keys())>0):
                     # take the keys from the parent class as well
-                    attrs = list(myMap['attributes'].keys())
-                    attrs.extend(list(superClassMap['attributes'].keys()))
+                    attrs = list(myDictionary['attributes'].keys())
+                    attrs.extend(list(superClassDict['attributes'].keys()))
                     classDefinition += baseindent*2 + "cls_keys = ['"+"','".join(list(attrs))+"']\n"
                 else:
-                    classDefinition += baseindent*2 + "cls_keys = ['"+"','".join(list(myMap['attributes']))+"']\n"
-                if superClassMap:
-                    classDefinition += baseindent*2 +  "obj = super({0}, cls).fromMap(map)\n".format(myMap['class'])
+                    classDefinition += baseindent*2 + "cls_keys = ['"+"','".join(list(myDictionary['attributes']))+"']\n"
+                if superClassDict:
+                    classDefinition += baseindent*2 +  "obj = super({0}, cls).fromDict(dict_obj)\n".format(myDictionary['class'])
                 else:
                     classDefinition += baseindent*2 + "obj = cls()\n"
-                classDefinition += baseindent*2 + "if not isinstance(map, types.DictType):\n"
+                classDefinition += baseindent*2 + "if not isinstance(dict_obj, types.DictType):\n"
                 classDefinition += baseindent*3
-                classDefinition += "logger.warn(\"{0}".format(myMap['class'])
-                classDefinition +=" - DictType expected - {0} found\\n\".format(type(map)))\n"
+                classDefinition += "logger.warn(\"{0}".format(myDictionary['class'])
+                classDefinition +=" - DictType expected - {0} found\\n\".format(type(dict_obj)))\n"
                 classDefinition += baseindent*3 + "return\n"
-                for attribute_key in myMap['attributes']:
-                    classDefinition += myMap['attributes'][attribute_key]['__map__']
-                if superClassMap:
-                    classDefinition += baseindent*2 + "for key in map:\n"
+                for attribute_key in myDictionary['attributes']:
+                    classDefinition += myDictionary['attributes'][attribute_key]['__dict__']
+                if superClassDict:
+                    classDefinition += baseindent*2 + "for key in dict_obj:\n"
                     classDefinition += baseindent*3 + "if not key in cls_keys:\n"
-                    classDefinition += baseindent*4 + "logger.warn(\"{0}".format(myMap['class'])
+                    classDefinition += baseindent*4 + "logger.warn(\"{0}".format(myDictionary['class'])
                     classDefinition +=" - invalid field - {0} found\".format(key))\n"
                     classDefinition += baseindent*4 + "return\n"            
                 classDefinition += baseindent*2 + "return obj\n"
@@ -1065,23 +1102,23 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 classDefinition += baseindent*2 + "\"\"\"\n"
                 #classDefinition += baseindent*2 + "logger.error(\"Validating class {0}\")\n".format(className)
                 classDefinition += baseindent*2 + "error = 0\n"
-                if superClassMap:
+                if superClassDict:
                     classDefinition += baseindent*2 + "# cumulate errors from super class\n"
-                    classDefinition += baseindent*2 +  "error = error + super({0}, self).validate(logger, path = path)\n".format(myMap['class'])
+                    classDefinition += baseindent*2 +  "error = error + super({0}, self).validate(logger, path = path)\n".format(myDictionary['class'])
                     '''
                      Add all required attribute from superclass
                     '''
-                    for attribute_key in superClassMap['attributes']:
+                    for attribute_key in superClassDict['attributes']:
                         if attribute_key in requiredArray:
                             classDefinition += baseindent*2 + "if self." + attribute_key + " is None:\n"
                             classDefinition += baseindent*3 + "logger.error(\""+className+" - {0}."+attribute_key+" is required\".format(path))\n"
                             classDefinition += baseindent*3 + "error = error + 1\n"
                             
-                for attribute_key in myMap['attributes']:
-                    if '__validate__' in myMap['attributes'][attribute_key]:
-                        classDefinition += myMap['attributes'][attribute_key]['__validate__']
+                for attribute_key in myDictionary['attributes']:
+                    if '__validate__' in myDictionary['attributes'][attribute_key]:
+                        classDefinition += myDictionary['attributes'][attribute_key]['__validate__']
                     else:
-                        print "WARNING: " + attribute_key + " has no validation predicate"
+                        print("WARNING: " + attribute_key + " has no validation predicate")
                         sys.exit(1)
 
                 
@@ -1091,106 +1128,116 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                 '''
                  6. Add other methods if any
                 '''
-                for attribute_key in myMap['attributes']:
-                    if myMap['attributes'][attribute_key].has_key('__methods__'):
-                        classDefinition += myMap['attributes'][attribute_key]['__methods__']
+                for attribute_key in myDictionary['attributes']:
+                    if '__methods__' in myDictionary['attributes'][attribute_key]:
+                        classDefinition += myDictionary['attributes'][attribute_key]['__methods__']
                 '''
                  7. Get dictionary of non empty fields including superclass fields
                 '''
                 classDefinition += baseindent + "\n"
                 classDefinition += baseindent + "def serialize(self):\n"
-                if superClassMap:
-                    classDefinition += baseindent*2 + "classDict = super({0}, self).serialize()\n".format(myMap['class'])
+                if superClassDict:
+                    classDefinition += baseindent*2 + "classDict = super({0}, self).serialize()\n".format(myDictionary['class'])
                 else:
-                    classDefinition += baseindent*2 + "classDict = {}\n"
-                for attribute_key in myMap['attributes']:
-                    if myMap['attributes'][attribute_key].has_key('__serialize__'):
-                        classDefinition += myMap['attributes'][attribute_key]['__serialize__']
+                    classDefinition += baseindent*2 + "classDict = collections.OrderedDict()\n"
+                for attribute_key in myDictionary['attributes']:
+                    if '__serialize__' in myDictionary['attributes'][attribute_key]:
+                        classDefinition += myDictionary['attributes'][attribute_key]['__serialize__']
                 classDefinition += baseindent*2 + "return classDict\n"
                 '''
                  8. Serialisation in JSON
+                 depending on python version, we implement 2 versions
+                 sys.version_info[:2]
                 '''
                 classDefinition += baseindent + "\n"
                 classDefinition += baseindent + "def to_JSON(self, indentation=4):\n"
+                classDefinition += baseindent*2 + "if sys.version_info[0] == 3:\n"
+                classDefinition += baseindent * 3 + "return json.dumps(self.serialize(), sort_keys=True, check_circular=False, indent=indentation)\n"
+                classDefinition += baseindent * 2 + "elif sys.version_info[0] == 2:\n"
                 #classDefinition += baseindent*2 + "return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, check_circular=False, indent=4)\n"
-                classDefinition += baseindent*2 + "return json.dumps(self, default=lambda o: o.serialize(), sort_keys=True, check_circular=False, indent=indentation)\n"
+                classDefinition += baseindent*3 + "return json.dumps(self, default=lambda o: o.serialize(), sort_keys=True, check_circular=False, indent=indentation)\n"
                 
                 '''
                  Finally store the class definition in the classes directory
                 '''
-                packageClassDefinitions[package][myMap['class']]['specs'] = myMap
-                packageClassDefinitions[package][myMap['class']]['classDefinition'] = classDefinition
+                packageClassDefinitions[package][myDictionary['class']]['specs'] = myDictionary
+                packageClassDefinitions[package][myDictionary['class']]['classDefinition'] = classDefinition
                 
-                #myMap['classes'].extend(classDefinition)
+                #myDictionary['classes'].extend(classDefinition)
         else:
             '''
              This field is a property of a class:
              1. generate the python code to initialise the variable in the default constructor
-             2. generate the python code to initialise the variable in the clone/map constructor
+             2. generate the python code to initialise the variable in the clone/fromDict constructor
              3. check the field is required or not
              4. validate the value of the field according to regex or format
              5. generate extra methods
             '''
             indent = baseindent*2
-            myMap['__init__'] = indent + "\n" + indent + "\"\"\"\n"
-            myMap['__init__'] += indent + "Name: " + propertyName + "\n"
-            myMap['__init__'] += indent + "Type: " + dataType + "\n"
-            myMap['__assign__'] = indent + "self." + propertyName + " = " + propertyName + "\n"
-            myMap['__methods__'] = ""
+            myDictionary['__init__'] = indent + "\n" + indent + "\"\"\"\n"
+            myDictionary['__init__'] += indent + "Name: " + propertyName + "\n"
+            myDictionary['__init__'] += indent + "Type: " + dataType + "\n"
+            myDictionary['__assign__'] = indent + "self." + propertyName + " = " + propertyName + "\n"
+            myDictionary['__methods__'] = ""
             
             '''
              Add the description as a comment
             '''
-            if (skeleton.has_key('description')):
-                myMap['__init__'] += indent + "Description: " + skeleton['description'] + "\n"
-            
+            if 'description' in skeleton:
+                myDictionary['__init__'] += indent + "Description: " + skeleton['description'] + "\n"
+
+            if canBeNull == True:
+                myDictionary['__init__'] += indent + "Can be null: True\n"
+            else:
+                myDictionary['__init__'] += indent + "Can be null: False\n"
+
             '''
              Check if the property is required:
-               1. if so, the value should be assigned from the deep-copy/map constructor
+               1. if so, the value should be assigned from the deep-copy/dictionary constructor
                2. the validation procedure must check the field exists
             '''
             if required:
                 #'{:%Y-%m-%d %H:%M:%S}'.format, gen
-                #myMap['__init__'] += indent + '#Required: {%r}\n'.format %(skeleton['required']))
-                myMap['__init__'] += indent + ('Required: {%r}' % (required)) + "\n"
-                myMap['__map__'] = indent + "if  '" + propertyName + "' in map:\n"
-                myMap['__map__'] += indent*2 + "obj." + propertyName + " = map['" + propertyName + "']\n"
-                myMap['__validate__'] = indent + "# "+ propertyName +" is mandatory\n"
-                myMap['__validate__'] += indent + "if self."+ propertyName +" is None :\n"
-                myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
-                myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                #myDictionary['__init__'] += indent + '#Required: {%r}\n'.format %(skeleton['required']))
+                myDictionary['__init__'] += indent + ('Required: {%r}' % (required)) + "\n"
+                myDictionary['__dict__'] = indent + "if  '" + propertyName + "' in dict_obj:\n"
+                myDictionary['__dict__'] += indent*2 + "obj." + propertyName + " = dict_obj['" + propertyName + "']\n"
+                myDictionary['__validate__'] = indent + "# "+ propertyName +" is mandatory\n"
+                myDictionary['__validate__'] += indent + "if self."+ propertyName +" is None :\n"
+                myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" is required\".format(path))\n"
+                myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
                 
             else:
-                myMap['__map__'] = indent + "if  '" + propertyName + "' in map:\n"
-                myMap['__map__'] += indent*2 + "obj." + propertyName + " = map['" + propertyName + "']\n"
+                myDictionary['__dict__'] = indent + "if  '" + propertyName + "' in dict_obj:\n"
+                myDictionary['__dict__'] += indent*2 + "obj." + propertyName + " = dict_obj['" + propertyName + "']\n"
             
-            myMap['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +"\n"
+            myDictionary['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = self." + propertyName +"\n"
             '''
              VALIDATION STEP 1: check there is a regular expression rule to apply (for validation)
             '''
             if 'pattern' in skeleton:
                 pattern = skeleton['pattern']
-                print "PATTERN {0} found for {1} {2}".format(skeleton['pattern'], parentName, propertyName)
-                if not '__validate__' in myMap:
-                    myMap['__validate__'] = ""
-                myMap['__validate__'] += indent + "\"\"\" Check regex: "+ pattern +" for validation\"\"\"\n"
-                myMap['__validate__'] += indent + "if self." + propertyName + " and not re.match('"+ pattern +"', self." + propertyName + "):\n"
-                myMap['__validate__'] += indent*2 + "logger.error(\"" + parentName + " - {0}." + propertyName + " '{1}'\".format(path,self." + propertyName + ") + \" does not match pattern '"+pattern+"'\")\n"
-                myMap['__validate__'] += indent*2 + "logger.warn(json.dumps(self.{0}, sort_keys=True, indent=2))\n".format(propertyName)
+                print("PATTERN %s found for %s %s"%(skeleton['pattern'], parentName, propertyName))
+                if not '__validate__' in myDictionary:
+                    myDictionary['__validate__'] = ""
+                myDictionary['__validate__'] += indent + "\"\"\" Check regex: "+ pattern +" for validation\"\"\"\n"
+                myDictionary['__validate__'] += indent + "if self." + propertyName + " is not None and not re.match('"+ pattern +"', self." + propertyName + "):\n"
+                myDictionary['__validate__'] += indent*2 + "logger.error(\"" + parentName + " - {0}." + propertyName + " '{1}'\".format(path,self." + propertyName + ") + \" does not match pattern '"+pattern+"'\")\n"
+                myDictionary['__validate__'] += indent*2 + "logger.warn(json.dumps(self.{0}, sort_keys=True, indent=2))\n".format(propertyName)
             '''
              VALIDATION STEP 2: check format is correct
             '''
             if ('format' in skeleton):
                 # "format": "date-time", "format": "email"
                 # we still need to validate those
-                myMap['__init__'] += indent + "String format: " + skeleton['format'] + "\n"
-                if not myMap.has_key('__validate__'):
-                    myMap['__validate__'] = ""
+                myDictionary['__init__'] += indent + "String format: " + skeleton['format'] + "\n"
+                if '__validate__' not in myDictionary:
+                    myDictionary['__validate__'] = ""
                 if skeleton['format'] == "email":
-                    myMap['__validate__'] += indent + "if not self." + propertyName + " is None and not re.match('[\\w.-]+@[\\w.-]+.\\w+', self." + propertyName + "):\n"
-                    myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" '{1}' is not a valid email address\".format(path, self."+propertyName+"))\n"
-                    myMap['__validate__'] += indent*2 + "logger.error(self.to_JSON)\n"
-                    myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                    myDictionary['__validate__'] += indent + "if not self." + propertyName + " is None and not re.match('[\\w.-]+@[\\w.-]+.\\w+', self." + propertyName + "):\n"
+                    myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" '{1}' is not a valid email address\".format(path, self."+propertyName+"))\n"
+                    myDictionary['__validate__'] += indent*2 + "logger.error(self.to_JSON)\n"
+                    myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
                 elif skeleton['format'] == "date-time":
                     '''
                      This SHOULD be a date in ISO 8601 format of YYYY-MM-DDThh:mm:ssZ in UTC time.  This is the recommended form of date/timestamp
@@ -1198,45 +1245,45 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                      So "2014-10-16T13:47:17.000+01:00" would be a valid datetime. 
                      Reference: http://www.w3.org/TR/NOTE-datetime
                     '''
-                    myMap['__validate__'] += indent + "if not self." + propertyName + " is None:\n"
-                    myMap['__validate__'] += indent*2 + "try:\n"
-                    myMap['__validate__'] += indent*3 + "iso8601.parse_date(self."+propertyName+")\n"
-                    myMap['__validate__'] += indent*2 + "except iso8601.iso8601.ParseError, e:\n"
-                    myMap['__validate__'] += indent*3 + "logger.error(\""+parentName+" - {0}."+propertyName+" '{1}' invalid ISO 8601 date (YYYY-MM-DDThh:mm:ss.sTZD expected)\".format(path, self."+propertyName+"))\n"
-                    #myMap['__validate__'] += indent*3 + "logger.error(self.to_JSON())\n"
-                    myMap['__validate__'] += indent*3 + "error = error+1\n"
+                    myDictionary['__validate__'] += indent + "if not self." + propertyName + " is None:\n"
+                    myDictionary['__validate__'] += indent*2 + "try:\n"
+                    myDictionary['__validate__'] += indent*3 + "iso8601.parse_date(self."+propertyName+")\n"
+                    myDictionary['__validate__'] += indent*2 + "except iso8601.ParseError as e:\n"
+                    myDictionary['__validate__'] += indent*3 + "logger.error(\""+parentName+" - {0}."+propertyName+" '{1}' invalid ISO 8601 date (YYYY-MM-DDThh:mm:ss.sTZD expected)\".format(path, self."+propertyName+"))\n"
+                    #myDictionary['__validate__'] += indent*3 + "logger.error(self.to_JSON())\n"
+                    myDictionary['__validate__'] += indent*3 + "error = error+1\n"
 
                     '''
                     Add method to convert to an ISODate
                     '''
-                    myMap['__methods__'] += baseindent + "def " + propertyName + "to_isoformat(self):\n" + indent + "iso8601.parse_date(self."+propertyName+").isoformat()\n"
+                    myDictionary['__methods__'] += baseindent + "def " + propertyName + "to_isoformat(self):\n" + indent + "iso8601.parse_date(self."+propertyName+").isoformat()\n"
                     
             if 'enum' in skeleton:
                 '''
                  The enum keyword is used to restrict a value to a fixed set of values. 
                  It must be an array with at least one element, where each element is unique
                 '''
-                if not myMap.has_key('__validate__'):
-                    myMap['__validate__'] = ""                
+                if '__validate__' not in myDictionary:
+                    myDictionary['__validate__'] = ""                
                 enumArray = None
                 if dataType == 'string':
                     enumArray = "'" + "','".join(skeleton['enum']) + "'"
                 else:
                     enumArray = ",".join(skeleton['enum'])
-                myMap['__validate__'] += indent + "if not self." + propertyName + " is None and not self." + propertyName + " in [" + enumArray + "]:\n"
-                myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" value is restricted to the fixed set of values " + enumArray + " ('{1}' given)\".format(path, self."+propertyName+"))\n"
-                myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                myDictionary['__validate__'] += indent + "if not self." + propertyName + " is None and not self." + propertyName + " in [" + enumArray + "]:\n"
+                myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" value is restricted to the fixed set of values " + enumArray + " ('{1}' given)\".format(path, self."+propertyName+"))\n"
+                myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
                 
             #if '$ref' in skeleton:
             #    '''
             #     This is the reference to an object of a different type 
             #    '''
-            #    if not myMap.has_key('__validate__'):
-            #        myMap['__validate__'] = ""               
-            #    myMap['__validate__'] += indent + propertyName + "_error = self." + propertyName +".validate(logger)\n"
-            #    myMap['__validate__'] += indent + "error = error + "+ propertyName + "_error\n"   
+            #    if '__validate__' not in myDictionary:
+            #        myDictionary['__validate__'] = ""               
+            #    myDictionary['__validate__'] += indent + propertyName + "_error = self." + propertyName +".validate(logger)\n"
+            #    myDictionary['__validate__'] += indent + "error = error + "+ propertyName + "_error\n"   
                 
-            myMap['__init__'] += indent + "\"\"\"\n"
+            myDictionary['__init__'] += indent + "\"\"\"\n"
             
             if 'oneOf' in skeleton:
                 '''
@@ -1251,42 +1298,42 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                  if not it will get it by parsing the file.
                  check if required or not
                 '''
-                myMap['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
-                myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                myMap['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
-                myMap['__default__'] = propertyName + " = None"
-                print "Why are we here?"
+                myDictionary['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
+                myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
+                myDictionary['__default__'] = propertyName + " = None"
+                print("Why are we here?")
                 sys.exit(1)
                 
             elif dataType == 'string':
                 '''
                  A string is initialised to None by default
                 '''
-                myMap['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
-                myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                myMap['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
-                myMap['__default__'] = propertyName + " = None"
+                myDictionary['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
+                myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
+                myDictionary['__default__'] = propertyName + " = None"
                 # Check type
-                if not '__validate__' in myMap:
-                    myMap['__validate__'] = ""
-                myMap['__validate__'] += indent + "if self." + propertyName + " and not isinstance(self." + propertyName + ", basestring):\n"
-                myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" type should be a string\".format(path))\n"
-                myMap['__validate__'] += indent*2 + "error = error + 1\n"    
+                if not '__validate__' in myDictionary:
+                    myDictionary['__validate__'] = ""
+                myDictionary['__validate__'] += indent + "if self." + propertyName + " is not None and not isinstance(self." + propertyName + ", six.string_types):\n"
+                myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" type should be a string\".format(path))\n"
+                myDictionary['__validate__'] += indent*2 + "error = error + 1\n"    
                 
                 
             elif dataType == 'boolean':
                 '''
                  A boolean is initialised to False by default
                 '''
-                myMap['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
-                myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                myMap['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
-                myMap['__default__'] = propertyName + " = False"
-                if not myMap.has_key('__validate__'):
-                    myMap['__validate__'] = ""
-                myMap['__validate__'] += indent + "if self." + propertyName + " and not type(self." + propertyName + ") is bool:\n"
-                myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" type should be a boolean\".format(path))\n"
-                myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                myDictionary['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
+                myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
+                myDictionary['__default__'] = propertyName + " = False"
+                if '__validate__' not in myDictionary:
+                    myDictionary['__validate__'] = ""
+                myDictionary['__validate__'] += indent + "if self." + propertyName + " is not None and not type(self." + propertyName + ") is bool:\n"
+                myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}."+propertyName+" type should be a boolean\".format(path))\n"
+                myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
                 
             elif dataType == 'number':
                 '''
@@ -1294,13 +1341,13 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                  field is mandatory
                  
                 '''
-                myMap['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
-                myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                myMap['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
+                myDictionary['__init__'] += indent + "self." + propertyName + " = " + propertyName + "\n"
+                myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = clone." + propertyName + "\n"
                 if required:
-                    myMap['__default__'] = propertyName + " = 0"
+                    myDictionary['__default__'] = propertyName + " = 0"
                 else:
-                    myMap['__default__'] = propertyName + " = None"
+                    myDictionary['__default__'] = propertyName + " = None"
 
                 '''
                  Constraints specific to numbers:
@@ -1309,39 +1356,39 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                   exclusiveMaximum, 
                   exclusiveMinimum
                 '''
-                constraint = []
-                message = []
-                if (skeleton.has_key('minimum')):
+                constraint = list()
+                message = list()
+                if 'minimum' in skeleton:
                     minimum = skeleton['minimum']
-                    constraint.append("self.{0} <= {1}".format(propertyName, minimum) if (skeleton.has_key('exclusiveMinimum')) else "self.{0} < {1}".format(propertyName, minimum))
-                    message.append("should be greater than {0}".format(minimum) if (skeleton.has_key('exclusiveMinimum')) else "should be greater than or equal to {0}".format(minimum))
-                if (skeleton.has_key('maximum')):
+                    constraint.append("self.{0} <= {1}".format(propertyName, minimum) if ('exclusiveMinimum' in skeleton) else "self.{0} < {1}".format(propertyName, minimum))
+                    message.append("should be greater than {0}".format(minimum) if ('exclusiveMinimum' in skeleton) else "should be greater than or equal to {0}".format(minimum))
+                if 'maximum' in skeleton:
                     maximum = skeleton['maximum']
-                    constraint.append("self.{0} >= {1}".format(propertyName, maximum) if (skeleton.has_key('exclusiveMaximum')) else "self.{0} > {1}".format(propertyName, maximum))
-                    message.append("should be lower than {0}".format(minimum) if (skeleton.has_key('exclusiveMaximum')) else "should be lower than or equal to {0}".format(maximum))
-                if (len(constraint)>0):
-                    if not myMap.has_key('__validate__'):
-                        myMap['__validate__'] = ""
+                    constraint.append("self.{0} >= {1}".format(propertyName, maximum) if ('exclusiveMaximum' in skeleton) else "self.{0} > {1}".format(propertyName, maximum))
+                    message.append("should be lower than {0}".format(minimum) if ('exclusiveMaximum' in skeleton) else "should be lower than or equal to {0}".format(maximum))
+                if len(constraint)>0:
+                    if '__validate__' not in myDictionary:
+                        myDictionary['__validate__'] = ""
                     if required:
-                        myMap['__validate__'] += indent + "if {0}:\n".format(" or ".join(constraint))
+                        myDictionary['__validate__'] += indent + "if {0}:\n".format(" or ".join(constraint))
                     else:
-                        myMap['__validate__'] += indent + "if self.{0} is not None and ({1}):\n".format(propertyName, " or ".join(constraint))
-                    myMap['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}.{1}: {2} {3}\".format(path, self.{1}))\n".format("{0}", propertyName, "{1}", " and ".join(message))
-                    #myMap['__validate__'] += indent*2 + "logger.error(self.to_JSON())\n"
-                    myMap['__validate__'] += indent*2 + "error = error+1\n"
+                        myDictionary['__validate__'] += indent + "if self.{0} is not None and ({1}):\n".format(propertyName, " or ".join(constraint))
+                    myDictionary['__validate__'] += indent*2 + "logger.error(\""+parentName+" - {0}.{1}: {2} {3}\".format(path, self.{1}))\n".format("{0}", propertyName, "{1}", " and ".join(message))
+                    #myDictionary['__validate__'] += indent*2 + "logger.error(self.to_JSON())\n"
+                    myDictionary['__validate__'] += indent*2 + "error = error+1\n"
                     
             elif dataType == 'array':
                 '''
                  An array is set to None by default
                  if it's required, it will be assigned. If not this will stay empty
                 '''
-                #myMap['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = []\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
-                myMap['__init__'] += indent + "self." + propertyName + " = "+ propertyName + "\n"
-                myMap['__default__'] = propertyName + " = None"
-                myMap['__clone__'] = indent + "if clone." + propertyName + ":\n"
-                myMap['__clone__'] += indent*2 + "obj." + propertyName + " = []; obj." + propertyName +".extend(clone." + propertyName + ")\n"
+                #myDictionary['__init__'] += indent + "if " + propertyName + " is None:\n" + indent*2 + "self." + propertyName + " = list()\n" + indent + "else:\n" + indent*2 + "self." + propertyName + " = "+ propertyName + "\n"
+                myDictionary['__init__'] += indent + "self." + propertyName + " = "+ propertyName + "\n"
+                myDictionary['__default__'] = propertyName + " = None"
+                myDictionary['__clone__'] = indent + "if clone." + propertyName + ":\n"
+                myDictionary['__clone__'] += indent*2 + "obj." + propertyName + " = list(); obj." + propertyName +".extend(clone." + propertyName + ")\n"
               
-                print "KEYS:{0}\n".format( ",".join(skeleton.keys()))
+                print("KEYS:%s\n"%( ",".join(skeleton.keys())))
                 
                 if 'items' in skeleton:
                     items = skeleton['items']
@@ -1358,7 +1405,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                     
                     if items['type'] == "string":
                         ''' can be string or unicode'''
-                        itemType = "basestring"
+                        itemType = "six.string_types"
                     elif items['type'] == "number":
                         itemType = "(int, long, float, complex)"
                     elif items['type'] == "object":
@@ -1367,7 +1414,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                             '''
                              is it a local or remote reference to an existing class?
                             '''
-                            print textindent + "ITEM REF: {0}\n".format(items['$ref'])
+                            print(textindent + "ITEM REF: %s\n"%(items['$ref']))
                             referencedClassProperties = get_class_properties_from_ref(items['$ref'], textindent, uri = uri, proxy = proxy)
                             if package == referencedClassProperties['package']:
                                 itemType = referencedClassProperties['class']
@@ -1379,25 +1426,25 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                             #itemType = classProperties['class']
 
                         elif 'id' in items:
-                            print "Creating type for child of property " + propertyName + "\n"
+                            print("Creating type for child of property " + propertyName + "\n")
                             sys.exit(1)
                         else:
-                            print "Anonymous class definition: Creating type for child of " + propertyName + "\n"
+                            print("Anonymous class definition: Creating type for child of " + propertyName + "\n")
                             # This has to be better 
-                            childMap = generate_classes(skeleton['items'], propertyName="_" + propertyName + "_item", package=package, depth=depth+1, uri=uri, proxy=proxy)
-                            if childMap['isAClass']:
-                                itemType = childMap['class']
-                            myMap['classes'].extend(childMap['classes'])
+                            childDict = generate_classes(skeleton['items'], propertyName="_" + propertyName + "_item", package=package, depth=depth+1, uri=uri, proxy=proxy)
+                            if childDict['isAClass']:
+                                itemType = childDict['class']
+                            myDictionary['classes'].extend(childDict['classes'])
                             
-                        myMap['__map__'] = indent + "if '" + propertyName + "' in map and isinstance(map['" + propertyName + "'], list):\n"
-                        myMap['__map__'] += indent*2 + "obj." + propertyName + " = []\n"
-                        myMap['__map__'] += indent*2 + "for item in map['" + propertyName + "']:\n"
-                        myMap['__map__'] += indent*3 + "obj." + propertyName + ".append("+itemType+".fromMap(item))\n"
+                        myDictionary['__dict__'] = indent + "if '" + propertyName + "' in dict_obj and isinstance(dict_obj['" + propertyName + "'], list):\n"
+                        myDictionary['__dict__'] += indent*2 + "obj." + propertyName + " = list()\n"
+                        myDictionary['__dict__'] += indent*2 + "for item in dict_obj['" + propertyName + "']:\n"
+                        myDictionary['__dict__'] += indent*3 + "obj." + propertyName + ".append("+itemType+".fromDict(item))\n"
                         
-                        myMap['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = map(lambda x: x.serialize(), self." + propertyName +")\n"
+                        myDictionary['__serialize__'] = indent + "if not self." + propertyName +" is None: classDict['"+propertyName+"'] = list(map(lambda x: x.serialize(), self." + propertyName +"))\n"
   
-                    #myMap['attributes'][attribute_key] = childMap
-                    # extends the classes definition with the one from this map
+                    #myDictionary['attributes'][attribute_key] = childDict
+                    # extends the classes definition with the one from this dictionary
                 
                     '''
                     This constraint is not specific to array but to enum values (for any element of the array)
@@ -1407,20 +1454,20 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                          The enum keyword is used to restrict a value to a fixed set of values. 
                          It must be an array with at least one element, where each element is unique
                         '''
-                        if not myMap.has_key('__validate__'):
-                            myMap['__validate__'] = ""                
+                        if '__validate__' not in myDictionary:
+                            myDictionary['__validate__'] = ""                
                         enumArray = None
-                        if itemType == 'basestring':
+                        if itemType == 'six.string_types':
                             enumArray = "'" + "','".join(items['enum']) + "'"
                         else:
                             enumArray = ",".join(items['enum'])
                             # check that each element is a valid enum type
-                        myMap['__validate__'] += indent + "if not self." + propertyName + " is None:\n"
-                        myMap['__validate__'] += indent*2 + "validValues = [" + enumArray + "]\n"
-                        myMap['__validate__'] += indent*2 + "for item in self." + propertyName + ":\n"
-                        myMap['__validate__'] += indent*3 + "if item not in validValues:\n"
-                        myMap['__validate__'] += indent*4 + "logger.error(\""+parentName+" - {0}."+propertyName+" value is restricted to the fixed set of values " + enumArray + " ('{1}' given)\".format(path, item))\n"
-                        myMap['__validate__'] += indent*4 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "if self." + propertyName + " is not None:\n"
+                        myDictionary['__validate__'] += indent*2 + "validValues = [" + enumArray + "]\n"
+                        myDictionary['__validate__'] += indent*2 + "for item in self." + propertyName + ":\n"
+                        myDictionary['__validate__'] += indent*3 + "if item not in validValues:\n"
+                        myDictionary['__validate__'] += indent*4 + "logger.error(\""+parentName+" - {0}."+propertyName+" value is restricted to the fixed set of values " + enumArray + " ('{1}' given)\".format(path, item))\n"
+                        myDictionary['__validate__'] += indent*4 + "error = error + 1\n"
                     
                     '''
                      There are some constraints specific to arrays:
@@ -1429,58 +1476,58 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                        maxItems
                        uniqueItems
                     '''
-                    if not myMap.has_key('__validate__'):
-                        myMap['__validate__'] = ""
+                    if '__validate__' not in myDictionary:
+                        myDictionary['__validate__'] = ""
                     '''
                     An empty array is always valid but the items should be of the specified type
                     '''
-                    myMap['__validate__'] += indent + "if not self.{0} is None and len(self.{0}) > 0 and not all(isinstance(n, {1}) for n in self.{0}):\n".format(propertyName, itemType)
-                    myMap['__validate__'] += indent*2 + "logger.error(\"{0} - {3}.{1} array should have elements of type '{2}'\".format(path))\n".format(parentName, propertyName, itemType, "{0}")
-                    myMap['__validate__'] += indent*2 + "error = error+1\n"
+                    myDictionary['__validate__'] += indent + "if self.{0} is not None and len(self.{0}) > 0 and not all(isinstance(n, {1}) for n in self.{0}):\n".format(propertyName, itemType)
+                    myDictionary['__validate__'] += indent*2 + "logger.error(\"{0} - {3}.{1} array should have elements of type '{2}'\".format(path))\n".format(parentName, propertyName, itemType, "{0}")
+                    myDictionary['__validate__'] += indent*2 + "error = error+1\n"
 
                     '''
                     If there is a minimum set of items to be checked then add a condition to test the number of items
                     '''
                     if ('minItems' in skeleton):
-                        print "MINITEMS FOR ATTRIBUTE %s"%propertyName
+                        print("MINITEMS FOR ATTRIBUTE %s"%propertyName)
                         constraint = skeleton['minItems']
-                        myMap['__validate__'] += indent + "if self.{0} and len(self.{0}) < {1}:\n".format(propertyName, constraint)
-                        myMap['__validate__'] += indent*2 + "logger.error(\"{0} - {3}.{1} array should have at least {2} elements\".format(path))\n".format(parentName, propertyName, constraint, "{0}")
-                        myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "if self.{0} is not None and len(self.{0}) < {1}:\n".format(propertyName, constraint)
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\"{0} - {3}.{1} array should have at least {2} elements\".format(path))\n".format(parentName, propertyName, constraint, "{0}")
+                        myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
 
                     if ('maxItems' in skeleton):
                         constraint = skeleton['maxItems']
-                        myMap['__validate__'] += indent + "if self.{0} and len(self.{0}) > {1}:\n".format(propertyName, constraint)
-                        myMap['__validate__'] += indent*2 + "logger.error(\"{0} - {3}.{1} array should have at most {2} elements\".format(path))\n".format(parentName, propertyName, constraint, "{0}")
-                        myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "if self.{0} is not None and len(self.{0}) > {1}:\n".format(propertyName, constraint)
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\"{0} - {3}.{1} array should have at most {2} elements\".format(path))\n".format(parentName, propertyName, constraint, "{0}")
+                        myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
 
                     if ('uniqueItems' in skeleton):
-                        myMap['__validate__'] += indent + "if self.{0} and len(set(self.{0})) != len(self.{0}):\n".format(propertyName)
-                        myMap['__validate__'] += indent*2 + "logger.error(\"{0} - {2}.{1} array have duplicated elements\".format(path))\n".format(parentName, propertyName, "{0}")
-                        myMap['__validate__'] += indent*2 + "error = error + 1\n"
+                        myDictionary['__validate__'] += indent + "if self.{0} is not None and len(set(self.{0})) != len(self.{0}):\n".format(propertyName)
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\"{0} - {2}.{1} array have duplicated elements\".format(path))\n".format(parentName, propertyName, "{0}")
+                        myDictionary['__validate__'] += indent*2 + "error = error + 1\n"
                     
                     if ('pattern' in items):
                         pattern = items['pattern']
-                        print "PATTERN {0} found for {1} {2}".format(items['pattern'], parentName, propertyName)
-                        myMap['__validate__'] += indent + "\"\"\" Check regex: "+ pattern +" for validation of array item\"\"\"\n"
-                        myMap['__validate__'] += indent + "if self." + propertyName + " and len(self." + propertyName + ") > 0 and not all(re.match('"+ pattern +"', n) for n in self." + propertyName + "):\n"
-                        myMap['__validate__'] += indent*2 + "logger.error(\"" + parentName + " - {0}." + propertyName + " items\".format(path) + \" do not match pattern '"+pattern+"'\")\n"
-                        #myMap['__validate__'] += indent*2 + "logger.warn(json.dumps(self.{0}, sort_keys=True, indent=2))\n".format(propertyName)                
+                        print("PATTERN %s found for %s %s"%(items['pattern'], parentName, propertyName))
+                        myDictionary['__validate__'] += indent + "\"\"\" Check regex: "+ pattern +" for validation of array item\"\"\"\n"
+                        myDictionary['__validate__'] += indent + "if self." + propertyName + " is not None and len(self." + propertyName + ") > 0 and not all(re.match('"+ pattern +"', n) for n in self." + propertyName + "):\n"
+                        myDictionary['__validate__'] += indent*2 + "logger.error(\"" + parentName + " - {0}." + propertyName + " items\".format(path) + \" do not match pattern '"+pattern+"'\")\n"
+                        #myDictionary['__validate__'] += indent*2 + "logger.warn(json.dumps(self.{0}, sort_keys=True, indent=2))\n".format(propertyName)                
     else:
         '''
          This data type is unknown
         '''
-        print textindent + "Can't process type %s" %(type(skeleton))
+        print(textindent + "Can't process type %s" %(type(skeleton)))
         sys.exit(1)
 
-    return myMap
+    return myDictionary
 
 def write_package_files(exportDirectory, dirpath, isAModule=False):
                 
     index = 0
     raw = dirpath.split("/")
     package = ".".join(raw)
-    print "Write python package " + package
+    print("Write python package " + package)
     subdirs = dirpath
     if isAModule:
         subdirs = "/".join(raw[0:len(raw)-1])
@@ -1488,6 +1535,7 @@ def write_package_files(exportDirectory, dirpath, isAModule=False):
      create directories recursively
     '''
     if not os.path.exists(exportDirectory + "/" + subdirs):
+        print("Create directory: %s"%(exportDirectory + "/" + subdirs))
         os.makedirs(exportDirectory + "/" + subdirs)
     '''
      create an init file recursively too (use the raw variable)
@@ -1495,7 +1543,7 @@ def write_package_files(exportDirectory, dirpath, isAModule=False):
 
     
     for i in range(1, len(raw)-1):
-        print "Create" + "/".join(raw[index:i])
+        print("Create __init__.py for " + "/".join(raw[index:i]))
         '''
         __init__.py
           
@@ -1505,13 +1553,17 @@ def write_package_files(exportDirectory, dirpath, isAModule=False):
         __import__('pkg_resources').declare_namespace(__name__)
         '''
         initFilename = exportDirectory + "/" + "/".join(raw[index:i]) + "/__init__.py"
-        if not os.path.isfile(initFilename):
+        package_level = "/".join(raw[index:i])
+        if not os.path.isfile(initFilename) and package_level != 'opentargets':
             initFile = open(initFilename, 'w')
             initFile.write('#package ' + ".".join(raw[index:i]) + "\n")
             #classfile.write("__import__('pkg_resources').declare_namespace(__name__)")
             initFile.write(authorship + "\n")
-            initFile.write("from pkgutil import extend_path\n")
-            initFile.write("__path__ = extend_path(__path__, __name__)")
+            if package_level != 'opentargets':
+                initFile.write("from pkgutil import extend_path\n")
+                initFile.write("__path__ = extend_path(__path__, __name__)")
+            else:
+                print("PACKAGE LEVEL = %s"%package_level)
             initFile.close()
     
     fileName = "__init__.py"
@@ -1537,7 +1589,7 @@ def write_package_files(exportDirectory, dirpath, isAModule=False):
     '''
      add imports
     '''
-    print "Add the following import statements to the package: " + ";".join(packageClassDefinitions[package]['imports'])
+    print("Add the following import statements to the package: " + ";".join(packageClassDefinitions[package]['imports']))
     initFile.write("\n".join(map(lambda x: "import " + x, packageClassDefinitions[package]['imports'])))
     initFile.write("\n")
     
@@ -1551,16 +1603,16 @@ def write_package_files(exportDirectory, dirpath, isAModule=False):
     '''
     initFile.write("logger = logging.getLogger(__name__)\n")
         
-    print "export following classes: " + ",".join(packageClassDefinitions[package]['classes'])
+    print("export following classes: " + ",".join(packageClassDefinitions[package]['classes']))
     
     if package == "opentargets.model.core":
         initFile.write("\nclass JSONException(Exception):\n")
         initFile.write(baseindent + "pass\n\n")
         
     for className in packageClassDefinitions[package]['classes']:
-        print "export class " + className
+        print("export class " + className)
         #classFileHandler = open(exportDirectory + "/" + dirpath + "/" + className+ ".py", 'w')
-        print "Add the following import statements to the package: " + ";".join(packageClassDefinitions[package][className]['imports'])
+        print("Add the following import statements to the package: " + ";".join(packageClassDefinitions[package][className]['imports']))
         initFile.write("\n".join(map(lambda x: "import " + x, packageClassDefinitions[package][className]['imports'])))
         initFile.write("\n")        
         initFile.write(packageClassDefinitions[package][className]['classDefinition'])
@@ -1603,12 +1655,10 @@ def main():
         os.makedirs(options.exportDirectory)
 
     # Load the configuration file
-    with open(options.json_schema_ini_file) as f:
-        dependencies_config = f.read()
-    config = ConfigParser.RawConfigParser(allow_no_value=True)
-    config.readfp(io.BytesIO(dependencies_config))
+    config = configparser.RawConfigParser(allow_no_value=True)
+    config.read(options.json_schema_ini_file)
 
-    dependencies = {}
+    dependencies = dict()
     # List all dependencies and assign correct python package mapping
     print("List all dependencies")
     for package in config.sections():
@@ -1632,8 +1682,8 @@ def main():
     
     generator = DataModelGenerator()
     
-    pythonPackages = []
-    pythonDirs = []
+    pythonPackages = list()
+    pythonDirs = list()
     # OK, let's iterate over all packages and classes in Turn
     for package in config.sections():
         print("Package: %s" % package)
@@ -1648,9 +1698,9 @@ def main():
          initialisation of the package in the package registry
          including default imports
         '''
-        packageClassDefinitions[pythonPackage] = {}
-        packageClassDefinitions[pythonPackage]['classes'] = []
-        packageClassDefinitions[pythonPackage]['imports'] = ["re", "sys", "iso8601", "types", "json", "logging"]    
+        packageClassDefinitions[pythonPackage] = dict()
+        packageClassDefinitions[pythonPackage]['classes'] = list()
+        packageClassDefinitions[pythonPackage]['imports'] = ["re", "sys", "iso8601", "types", "json", "logging", "six", "collections"]
         
         '''
          parse each file in turn
@@ -1667,9 +1717,10 @@ def main():
                 opener = build_opener(proxy_handler)
                 data = opener.open(uri).read()
             else:
-                data = urlopen( uri ).read()
+                r = requests.get(uri)
             #data = r'{0}'.format(data)
-            decoded = json.loads(data)
+            decoded = r.json()
+            #json.loads(data)
             generator._generate_classes(decoded, package=pythonPackage, uri=uri, proxy=options.proxy)
             
         '''
@@ -1685,7 +1736,7 @@ def main():
     generator._generate_file(options.exportDirectory, requirements, "requirements.txt")
     generator._generate_file(options.exportDirectory, manifest, "MANIFEST.in")
     shutil.copy2(testDirectory +'/test_data_model.py', options.exportDirectory + "/opentargets/model/test_data_model.py")
-    print 'The package has been generated in ', options.exportDirectory
+    print('The package has been generated in ', options.exportDirectory)
     # exit here
     sys.exit()
     

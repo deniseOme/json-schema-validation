@@ -23,6 +23,7 @@ limitations under the License.
 from __future__ import absolute_import, print_function
 from nose.tools.nontrivial import with_setup
 import sys
+import json
 import logging
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -33,12 +34,13 @@ import opentargets.model.evidence.core as evidence_core
 import opentargets.model.evidence.genetics as evidence_genetics
 import opentargets.model.evidence.association_score as evidence_score
 import opentargets.model.evidence.phenotype as evidence_phenotype
+import opentargets.model.evidence.linkout as evidence_linkout
 
 __author__ = "Gautier Koscielny"
 __copyright__ = "Copyright 2014-2017, The Centre for Therapeutic Target Validation (CTTV)"
 __credits__ = ["Gautier Koscielny", "Samiul Hasan", "Michael Maguire"]
 __license__ = "Apache 2.0"
-__version__ = "1.2.4"
+__version__ = "1.2.8"
 __maintainer__ = "Gautier Koscielny"
 __email__ = "gautierk@targetvalidation.org"
 __status__ = "Production"
@@ -96,25 +98,130 @@ def test_base_create_and_clone():
     obj = opentargets.Base()
     obj.access_level = "public"
     obj.sourceID = "opentargets"
-    obj.validated_against_schema_version = "1.2.4"
+    obj.validated_against_schema_version = "1.2.8"
     # create a target
-    obj.target = bioentity.Target(id=["http://identifiers.org/ensembl/ENSG00000213724"], activity="http://identifiers.org/cttv.activity/predicted_damaging", target_type="http://identifiers.org/cttv.target/gene_evidence")
-    obj.disease = bioentity.Disease(id=["http://www.ebi.ac.uk/efo/EFO_0003767"]) 
+    obj.target = bioentity.Target(
+        id="http://identifiers.org/ensembl/ENSG00000213724",
+        activity="http://identifiers.org/cttv.activity/predicted_damaging",
+        target_type="http://identifiers.org/cttv.target/gene_evidence")
+    obj.disease = bioentity.Disease(id="http://www.ebi.ac.uk/efo/EFO_0003767")
     errors = obj.validate(logger)
+    assert obj is not None and errors == 0
+
+    # try to serialize
+    obj.serialize()
+    str = obj.to_JSON(indentation=None)
+
+
+@with_setup(my_setup_function, my_teardown_function)
+def test_genomics_englad_create_and_clone():
+    print("test_genomics_englad_create_and_clone")
+    obj = opentargets.Literature_Curated(type='genetic_literature')
+    obj.access_level = "public"
+    obj.sourceID = "genomics_england"
+    obj.validated_against_schema_version = "1.2.8"
+    obj.unique_association_fields = dict(
+        target="http://identifiers.org/ensembl/ENSG00000213724",
+        object="http://www.ebi.ac.uk/efo/EFO_0003767",
+        variant="http://identifiers.org/dbsnp/rs11010067",
+        study_name="cttv009_gwas_catalog",
+        pvalue="2.000000039082963e-25",
+        pubmed_refs="http://europepmc.org/abstract/MED/23128233")
+
+    # create target, disease and variant
+    obj.target = bioentity.Target(
+        id="http://identifiers.org/ensembl/ENSG00000213724",
+        activity="http://identifiers.org/cttv.activity/predicted_damaging",
+        target_type="http://identifiers.org/cttv.target/gene_evidence")
+    obj.disease = bioentity.Disease(id="http://www.ebi.ac.uk/efo/EFO_0003767")
+
+    publications = None
+    single_lit_ref_list = list()
+    if publications is not None:
+        publications = re.findall(r"\'(.+?)\'", str(publications))
+        if len(publications) > 0:
+            for paper_set in publications:
+                paper_set = re.findall(r"\d{7,12}", paper_set)
+                for paper in paper_set:
+                    lit_url = "http://europepmc.org/abstract/MED/" + paper
+                    single_lit_ref_list.append(evidence_core.Single_Lit_Reference(lit_id=lit_url))
+        else:
+            print("no publication found for %s %s %s" % (panel_name, panel_id, publications))
+            lit_url = "http://europepmc.org/abstract/MED/00000000"
+            single_lit_ref_list.append(evidence_core.Single_Lit_Reference(lit_id=lit_url))
+
+    provenance_type = evidence_core.BaseProvenance_Type(
+        database=evidence_core.BaseDatabase(
+            id="Genomics England PanelApp",
+            version='v4.1',
+            dbxref=evidence_core.BaseDbxref(
+                url="https://panelapp.genomicsengland.co.uk/",
+                id="Genomics England PanelApp", version="v5.7")),
+        literature=evidence_core.BaseLiterature(
+            references=single_lit_ref_list
+        )
+    )
+
+    d = provenance_type.serialize()
+    print(json.dumps(d, indent=2))
+
+    level_of_confidence = 'HighEvidence'
+    resource_score = evidence_score.Probability(
+        type="probability",
+        method=evidence_score.Method(
+            description="Further details in the Genomics England PanelApp.",
+            reference="NA",
+            url="https://panelapp.genomicsengland.co.uk"),
+        value=0.5)
+
+    now = datetime.datetime.now()
+
+    obj.evidence = evidence_core.Literature_Curated()
+    obj.evidence.is_associated = True
+    obj.evidence.evidence_codes = ["http://purl.obolibrary.org/obo/ECO_0000205"]
+    obj.evidence.provenance_type = provenance_type
+    obj.evidence.date_asserted = now.isoformat()
+    obj.evidence.provenance_type = provenance_type
+    obj.evidence.resource_score = resource_score
+    # specific
+    linkout = evidence_linkout.Linkout(
+        url="http://www.genomicsengland.co.uk/dummy",
+        nice_name='Further details in the Genomics England PanelApp')
+
+    d = linkout.serialize()
+    print(json.dumps(d, indent=2))
+
+    obj.evidence.urls = [linkout]
+    d = obj.serialize()
+    print(json.dumps(d, indent=2))
+    errors = obj.validate(logger)
+
     assert not obj == None and errors == 0
-    
+
+    tojson = obj.to_JSON()
+
+
 @with_setup(my_setup_function, my_teardown_function)
 def test_genetics_create_and_clone():
     obj = opentargets.Genetics(type="genetic_association")
     obj.access_level = "public"
     obj.sourceID = "opentargets"
-    obj.validated_against_schema_version = "1.2.4"
-    obj.unique_association_fields = { "target": "http://identifiers.org/ensembl/ENSG00000213724", "object": "http://www.ebi.ac.uk/efo/EFO_0003767", "variant": "http://identifiers.org/dbsnp/rs11010067", "study_name": "cttv009_gwas_catalog", "pvalue": "2.000000039082963e-25", "pubmed_refs": "http://europepmc.org/abstract/MED/23128233" }
+    obj.validated_against_schema_version = "1.2.8"
+    obj.unique_association_fields = {
+        "target": "http://identifiers.org/ensembl/ENSG00000213724",
+        "object": "http://www.ebi.ac.uk/efo/EFO_0003767",
+        "variant": "http://identifiers.org/dbsnp/rs11010067",
+        "study_name": "cttv009_gwas_catalog",
+        "pvalue": "2.000000039082963e-25",
+        "pubmed_refs": "http://europepmc.org/abstract/MED/23128233" }
 
     # create target, disease and variant
-    obj.target = bioentity.Target(id=["http://identifiers.org/ensembl/ENSG00000213724"], activity="http://identifiers.org/cttv.activity/predicted_damaging", target_type="http://identifiers.org/cttv.target/gene_evidence")
-    obj.disease = bioentity.Disease(id=["http://www.ebi.ac.uk/efo/EFO_0003767"]) 
-    obj.variant = bioentity.Variant(id=["http://identifiers.org/dbsnp/rs11010067"], type="snp single") 
+    obj.target = bioentity.Target(
+        id="http://identifiers.org/ensembl/ENSG00000213724",
+        activity="http://identifiers.org/cttv.activity/predicted_damaging",
+        target_type="http://identifiers.org/cttv.target/gene_evidence")
+    obj.disease = bioentity.Disease(id="http://www.ebi.ac.uk/efo/EFO_0003767")
+    obj.variant = bioentity.Variant(id="http://identifiers.org/dbsnp/rs11010067", type="snp single")
     obj.evidence = opentargets.GeneticsEvidence(
         variant2disease = evidence_genetics.Variant2Disease(  
             evidence_codes = ["http://purl.obolibrary.org/obo/ECO_0000205"], 
@@ -144,18 +251,18 @@ def test_animal_models_create_and_clone():
 
     now = datetime.datetime.now()
     obj = opentargets.Animal_Models()
-    obj.validated_against_schema_version = '1.2.4'
+    obj.validated_against_schema_version = '1.2.8'
     obj.access_level = 'public'
     obj.type = 'animal_model'
     obj.sourceID = 'phenodigm'
     obj.target = bioentity.Target(
-        id = ["http://www.identifier.org/ensembl/ENSG00000105810"], 
+        id = "http://www.identifier.org/ensembl/ENSG00000105810",
         target_type="http://identifiers.org/cttv.target/gene_evidence", 
         activity="http://identifiers.org/cttv.activity/predicted_damaging"
         )
     obj.disease = bioentity.Disease(
-        id = ["http://www.orpha.net/ORDO/Orphanet_137631"], 
-        name=["Lung fibrosis - immunodeficiency - 46,XX gonadal dysgenesis"]
+        id = "http://www.orpha.net/ORDO/Orphanet_137631",
+        name="Lung fibrosis - immunodeficiency - 46,XX gonadal dysgenesis"
         )
 
     obj.unique_association_fields = {}
@@ -249,7 +356,7 @@ def test_expression_create_and_clone():
     obj = opentargets.Expression()
     obj.access_level = "public"
     obj.sourceID = "opentargets"
-    obj.validated_against_schema_version = "1.2.4"
+    obj.validated_against_schema_version = "1.2.8"
     # create a target
     obj.target = bioentity.Target(
         id=["http://identifiers.org/ensembl/ENSG00000213724"], 
@@ -279,12 +386,12 @@ def test_literature_mining_create_and_clone():
     obj = opentargets.Literature_Mining(type='literature')
     obj.access_level = "public"
     obj.sourceID = "disgenet"
-    obj.validated_against_schema_version = "1.2.4"
+    obj.validated_against_schema_version = "1.2.8"
     obj.unique_association_fields = {"target": target,
             "publicationIDs": lit_id_,
             "disease_uri": disease}
-    obj.target = bioentity.Target(id=[target], activity="http://identifiers.org/cttv.activity/up_or_down", target_type="http://identifiers.org/cttv.target/gene_or_protein_or_transcript")
-    obj.disease = bioentity.Disease(id=[disease])
+    obj.target = bioentity.Target(id=target, activity="http://identifiers.org/cttv.activity/up_or_down", target_type="http://identifiers.org/cttv.target/gene_or_protein_or_transcript")
+    obj.disease = bioentity.Disease(id=disease)
     obj.evidence = evidence_core.Literature_Mining()
     obj.evidence.unique_experiment_reference = lit_id_
     obj.evidence.provenance_type = evidence_core.BaseProvenance_Type()
