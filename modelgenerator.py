@@ -1,6 +1,6 @@
 ﻿'''
-Copyright 2014-2017 EMBL - European Bioinformatics Institute, Wellcome
-Trust Sanger Institute, GlaxoSmithKline and Biogen
+Copyright 2018 Biogen, Celgene Corporation, EMBL - European Bioinformatics Institute, GlaxoSmithKline,
+Takeda Pharmaceutical Company and Wellcome Sanger Institute
 
 This software was developed as part of Open Targets. For more information please see:
 
@@ -35,7 +35,7 @@ import io
 import requests
 
 __author__ = "Gautier Koscielny"
-__copyright__ = "Copyright 2014-2017, Open Targets"
+__copyright__ = "Copyright 2014-2018, Open Targets"
 __credits__ = ["Gautier Koscielny", "Samiul Hasan"]
 __license__ = "Apache 2.0"
 __version__ = "1.2.8"
@@ -74,13 +74,13 @@ setenv =
 '''
 
 setup = '''import os
-
+# install_requires 'opentargets'
 try:
     from setuptools import setup
 except ImportError:
     from distutils import setup
 
-long_description = open(os.path.join(os.path.dirname(__file__), "README.rst")).read()
+long_description = open(os.path.join(os.path.dirname(__file__), "README.md")).read()
 
 setup(
     name="data_model",
@@ -104,8 +104,8 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     install_requires=[
-          'opentargets',
           'iso8601>=0.1.12',
+          'six'
     ],
     extras_require={
           'tests': [
@@ -117,14 +117,55 @@ setup(
 
 '''
 
-readme = '''Simple module to validate, compare and generate Open Targets evidence strings
+readme = '''
+# Data Model
 
-Installation using python's pip installer:
+Target-Disease evidence are represented in JSON format in Open Targets. While it's possible to 'validate' json data 
+using modules such as [jsonschema](https://pypi.org/project/jsonschema/) and generate evidence strings with dictionaries 
+and lists, we decided at the beginning of the project to have a python module to generate and validate evidence based on an object-oriented 
+representation of the evidence. 
 
-- (As root) pip install git+https://github.com/opentargets/data_model.git
-- (Install to a custom folder called 'data_model') pip install -t data_model git+https://github.com/opentargets/data_model.git
-- (Install a specific version of the code in a specific folder, here 1.2.8) pip install -t data_model-1.2.8 git+https://github.com/opentargets/data_model.git@1.2.8
+Hence opentargets.datamodel is a simple module to generate, validate, and compare Open Targets evidence. 
+The python code is auto-generated from the json schema itself meaning that any change can be reflected immediately in the data model.
 
+# Getting Started
+
+The following instructions will get you a version of the module
+## Installing
+Using python's pip installer:
+```shell
+pip install git+https://github.com/opentargets/data_model.git
+```
+To install a specific version of the code in a specific folder, here 1.2.8:
+```shell
+pip install -t data_model-1.2.8 git+https://github.com/opentargets/data_model.git@1.2.8
+```
+
+## Examples
+
+There is currently a file called test_data_model.py with examples on how to build evidence strings.
+This will be updated to the latest schema to reflect the recent changes.
+
+# Author
+
+Gautier Koscielny
+
+# Copyright and license
+Copyright 2014-2018 Biogen, Celgene Corporation, EMBL - European Bioinformatics Institute, GlaxoSmithKline, Takeda Pharmaceutical Company and Wellcome Sanger Institute
+
+This software was developed as part of the Open Targets project. For more information please see: http://www.opentargets.org
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 '''
 
 license = '''
@@ -306,45 +347,18 @@ license = '''
 
    END OF TERMS AND CONDITIONS
 
-   APPENDIX: How to apply the Apache License to your work.
-
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
-
-   Copyright (c) 2014 - 2017 Open Targets
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
 '''
 
 licence_header = '''
-Copyright 2014-2017 EMBL - European Bioinformatics Institute, Wellcome
-Trust Sanger Institute, GlaxoSmithKline and Biogen
+Copyright 2014-2018 Biogen, Celgene Corporation, EMBL - European Bioinformatics Institute, GlaxoSmithKline, Takeda Pharmaceutical Company and Wellcome Sanger Institute
 
-This software was developed as part of Open Targets. For more information please see:
-
-	http://targetvalidation.org
+This software was developed as part of the Open Targets project. For more information please see: http://www.opentargets.org
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-	http://www.apache.org/licenses/LICENSE-2.0
+   http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -355,7 +369,7 @@ limitations under the License.
 
 authorship = '''
 __author__ = "Gautier Koscielny"
-__copyright__ = "Copyright 2014-2017, Open Targets"
+__copyright__ = "Copyright 2014-2018 Biogen, Celgene Corporation, EMBL - European Bioinformatics Institute, GlaxoSmithKline, Takeda Pharmaceutical Company and Wellcome Sanger Institute"
 __credits__ = ["Gautier Koscielny", "Samiul Hasan"]
 __license__ = "Apache 2.0"
 __version__ = "1.2.8"
@@ -363,6 +377,12 @@ __maintainer__ = "Gautier Koscielny"
 __email__ = "gautierk@targetvalidation.org"
 __status__ = "Production"
 '''
+
+def get_dict_type():
+    # old style
+    #return "types.DictType"
+    # new style
+    return "dict"
 
 def get_class_properties_from_ref(ref, textindent, innerClass = None, uri = None, proxy = None):
     '''
@@ -1076,7 +1096,7 @@ def generate_classes(skeleton, propertyName=None, parentName=None, package=None,
                     classDefinition += baseindent*2 +  "obj = super({0}, cls).fromDict(dict_obj)\n".format(myDictionary['class'])
                 else:
                     classDefinition += baseindent*2 + "obj = cls()\n"
-                classDefinition += baseindent*2 + "if not isinstance(dict_obj, types.DictType):\n"
+                classDefinition += baseindent*2 + "if not isinstance(dict_obj, " + get_dict_type() + "):\n"
                 classDefinition += baseindent*3
                 classDefinition += "logger.warn(\"{0}".format(myDictionary['class'])
                 classDefinition +=" - DictType expected - {0} found\\n\".format(type(dict_obj)))\n"
@@ -1556,6 +1576,13 @@ def write_package_files(exportDirectory, dirpath, isAModule=False):
         package_level = "/".join(raw[index:i])
         if not os.path.isfile(initFilename) and package_level != 'opentargets':
             initFile = open(initFilename, 'w')
+            '''
+             Add licence header
+            '''
+            initFile.write("'''")
+            initFile.write(licence_header)
+            initFile.write("'''\n")
+
             initFile.write('#package ' + ".".join(raw[index:i]) + "\n")
             #classfile.write("__import__('pkg_resources').declare_namespace(__name__)")
             initFile.write(authorship + "\n")
@@ -1729,7 +1756,7 @@ def main():
         generator._write_package_files(options.exportDirectory, package, len(config.options(package))>0)
             
     generator._generate_file(options.exportDirectory, license, "LICENSE")
-    generator._generate_file(options.exportDirectory, readme, "README.rst")
+    generator._generate_file(options.exportDirectory, readme, "README.md")
     
     generator._generate_file(options.exportDirectory, setup.replace("LIST_PACKAGES", ",".join(pythonDirs)), "setup.py")
     generator._generate_file(options.exportDirectory, tox, "tox.ini")
